@@ -20,10 +20,35 @@ if (!process.env.AES_SECRET_KEY || process.env.AES_SECRET_KEY.length !== 64) {
 
 const app = express();
 
-// In production, set FRONTEND_URL to your deployed frontend's origin
-// (e.g. https://securecard.vercel.app). Locally this falls back to allowing all origins.
-const allowedOrigin = process.env.FRONTEND_URL || "*";
-app.use(cors({ origin: allowedOrigin }));
+// In production, set FRONTEND_URL to your deployed frontend's stable origin
+// (e.g. https://securecard.vercel.app). Vercel preview URLs (which change on
+// every deploy) are matched separately via the regex below.
+const allowedOrigins = [
+  process.env.FRONTEND_URL, // stable production URL from .env
+  /^https:\/\/secure-card-.*-flower-shop1\.vercel\.app$/, // any Vercel preview deploy for this project
+].filter(Boolean); // removes undefined if FRONTEND_URL isn't set
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow requests with no origin (curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+
+      const isAllowed = allowedOrigins.some((allowed) =>
+        allowed instanceof RegExp ? allowed.test(origin) : allowed === origin
+      );
+
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        console.warn("Blocked by CORS:", origin);
+        callback(new Error("Not allowed by CORS: " + origin));
+      }
+    },
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
